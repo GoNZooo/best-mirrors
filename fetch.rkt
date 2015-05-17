@@ -1,9 +1,17 @@
-#lang racket
+#lang racket/base
 
 (require racket/match
          racket/port
+         racket/contract
+         racket/list
          net/url
-         json)
+         json
+         
+         ; This beautiful macro will allow pipelining
+         ; and specifying explicitly (with '<>') where
+         ; the pipelined value will go in the next stage
+         ; of the pipeline
+         jeapostrophe/threading-arrow)
 
 (struct mirror (url
                  score
@@ -53,7 +61,8 @@
                country-code
                last-sync)]))
 
-  (map json-item->mirror (hash-ref jsexprs 'urls)))
+  (~> (hash-ref jsexprs 'urls)
+      (map json-item->mirror <>)))
 
 (define/contract (get-mirror-score m)
   (mirror? . -> . number?)
@@ -67,7 +76,15 @@
 
   (sort mirrors < #:key get-mirror-score))
 
+(define/contract (get-best-mirrors/score n)
+  (integer? . -> . (listof mirror?))
+  
+  (~> (fetch-mirrors)
+      json-data->mirrors
+      sort-mirrors/score
+      (take <> n)))
+
 (module+ main
   (require racket/pretty)
-  (pretty-print (map mirror-score
-                     (sort-mirrors/score (json-data->mirrors (fetch-mirrors))))))
+  (pretty-print
+    (get-best-mirrors/score 5)))
